@@ -183,29 +183,40 @@ func (rc *retryConsumer) Consume(out interface{}) error {
 	return rc.ConsumeTimeout(out, -1)
 }
 
+// ConsumeId consumes a single message from the queue.
+func (rc *retryConsumer) ConsumeId(out interface{}) (uint64, error) {
+	return rc.ConsumeTimeoutId(out, -1)
+}
+
+func (rc *retryConsumer) ConsumeTimeout(out interface{}, timeout time.Duration) error {
+	_, err := rc.ConsumeTimeoutId(out, timeout)
+	return err
+}
+
 // ConsumeTimeout consumes a single message from the queue with an upper bound
 // on the time spent waiting.
-func (rc *retryConsumer) ConsumeTimeout(out interface{}, timeout time.Duration) error {
+func (rc *retryConsumer) ConsumeTimeoutId(out interface{}, timeout time.Duration) (uint64, error) {
 	// Record the deadline so we can honor the timeout
 	var deadline time.Time
 	if timeout >= 0 {
 		deadline = time.Now().Add(timeout)
 	}
 
+	var id uint64
 	for i := 0; ; i++ {
 		cons, err := rc.consumer(true)
 		if err != nil {
 			goto RETRY
 		}
 
-		err = cons.ConsumeTimeout(out, timeout)
+		id, err = cons.ConsumeTimeoutId(out, timeout)
 		if err == nil {
 			break
 		}
 
 		// Respect the case where the consume legitimately times out.
 		if err == TimedOut {
-			return err
+			return 0, err
 		}
 
 	RETRY:
@@ -213,14 +224,14 @@ func (rc *retryConsumer) ConsumeTimeout(out interface{}, timeout time.Duration) 
 		rc.discard(cons)
 		if i == rc.attempts {
 			log.Printf("[ERR] relay: consumer giving up after %d attempts", i)
-			return err
+			return 0, err
 		}
 
 		// Check if we are already passed the deadline
 		now := time.Now()
 		if !deadline.IsZero() && now.After(deadline) {
 			log.Printf("[DEBUG] relay: consumer reached deadline")
-			return TimedOut
+			return 0, TimedOut
 		}
 
 		// Calculate the next wait period
@@ -239,7 +250,7 @@ func (rc *retryConsumer) ConsumeTimeout(out interface{}, timeout time.Duration) 
 		log.Printf("[DEBUG] relay: consumer retrying in %s", wait)
 		time.Sleep(wait)
 	}
-	return nil
+	return id, nil
 }
 
 // retryPublisher wraps a relay broker and an associated publisher, allowing

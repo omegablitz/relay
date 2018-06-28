@@ -3,9 +3,10 @@ package relay
 import (
 	"bytes"
 	"fmt"
-	"github.com/streadway/amqp"
 	"strings"
 	"time"
+
+	"github.com/streadway/amqp"
 )
 
 // Consumer is a type that is used only for consuming messages from a single queue.
@@ -21,23 +22,28 @@ type Consumer struct {
 	needAck     bool
 }
 
+func (c *Consumer) ConsumeTimeout(out interface{}, timeout time.Duration) error {
+	_, err := c.ConsumeTimeoutId(out, timeout)
+	return err
+}
+
 // Consume will consume the next available message or times out waiting. The
 // message must be acknowledged with Ack() or Nack() before
 // the next call to Consume unless EnableMultiAck is true.
-func (c *Consumer) ConsumeTimeout(out interface{}, timeout time.Duration) error {
+func (c *Consumer) ConsumeTimeoutId(out interface{}, timeout time.Duration) (uint64, error) {
 	// Check if we are closed
 	if c.channel == nil {
-		return ChannelClosed
+		return 0, ChannelClosed
 	}
 
 	// Check if an ack is required
 	if c.needAck && !c.conf.EnableMultiAck {
-		return fmt.Errorf("Ack required before consume!")
+		return 0, fmt.Errorf("Ack required before consume!")
 	}
 
 	// Check if we've reached the prefetch count without Ack'ing
 	if c.conf.EnableMultiAck && c.numNoAck >= c.conf.PrefetchCount {
-		return fmt.Errorf("Consume will block without Ack!")
+		return 0, fmt.Errorf("Consume will block without Ack!")
 	}
 
 	// Get a timeout
@@ -52,10 +58,10 @@ func (c *Consumer) ConsumeTimeout(out interface{}, timeout time.Duration) error 
 	select {
 	case d, ok = <-c.deliverChan:
 		if !ok {
-			return ChannelClosed
+			return 0, ChannelClosed
 		}
 	case <-wait:
-		return TimedOut
+		return 0, TimedOut
 	}
 
 	// Store the delivery tag for future Ack
@@ -69,9 +75,9 @@ func (c *Consumer) ConsumeTimeout(out interface{}, timeout time.Duration) error 
 		// Since we have dequeued, we must now Nack, since the consumer
 		// will not ever receive the message. This way redelivery is possible.
 		c.Nack()
-		return fmt.Errorf("Failed to decode message! Got: %s", err)
+		return 0, fmt.Errorf("Failed to decode message! Got: %s", err)
 	}
-	return nil
+	return d.DeliveryTag, nil
 }
 
 // Consume will consume the next available message. The
@@ -79,6 +85,10 @@ func (c *Consumer) ConsumeTimeout(out interface{}, timeout time.Duration) error 
 // the next call to Consume unless EnableMultiAck is true.
 func (c *Consumer) Consume(out interface{}) error {
 	return c.ConsumeTimeout(out, -1)
+}
+
+func (c *Consumer) ConsumeId(out interface{}) (uint64, error) {
+	return c.ConsumeTimeoutId(out, -1)
 }
 
 // ConsumeAck will consume the next message and acknowledge
@@ -109,6 +119,23 @@ func (c *Consumer) Ack() error {
 	}
 	c.needAck = false
 	c.numNoAck = 0
+	return nil
+}
+
+// AckMsg will send an acknowledgement to the server that the
+// given was processed. If EnableMultiAck is true, then all messages up to the last consumed one will
+// be acknowledged
+func (c *Consumer) AckMsg(msg uint64) error {
+	if c.channel == nil {
+		return ChannelClosed
+	}
+	if !c.needAck {
+		fmt.Errorf("Ack is not required!")
+	}
+	if err := c.channel.Ack(msg, false); err != nil {
+		return err
+	}
+	c.numNoAck--
 	return nil
 }
 

@@ -21,7 +21,9 @@ type Consumer interface {
 	Close() error
 	Consume(out interface{}) error
 	ConsumeAck(out interface{}) error
+	ConsumeId(out interface{}) (uint64, error)
 	ConsumeTimeout(out interface{}, timeout time.Duration) error
+	ConsumeTimeoutId(out interface{}, timeout time.Duration) (uint64, error)
 	Ack() error
 	Nack() error
 }

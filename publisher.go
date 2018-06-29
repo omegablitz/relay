@@ -3,11 +3,12 @@ package relay
 import (
 	"bytes"
 	"fmt"
-	"github.com/streadway/amqp"
 	"log"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/streadway/amqp"
 )
 
 // Publisher is a type that is used only for publishing messages to a single queue.

@@ -42,9 +42,9 @@ func (c *Consumer) ConsumeTimeoutId(out interface{}, timeout time.Duration) (uin
 	}
 
 	// Check if we've reached the prefetch count without Ack'ing
-	if c.conf.EnableMultiAck && c.numNoAck >= c.conf.PrefetchCount {
-		return 0, fmt.Errorf("Consume will block without Ack!")
-	}
+	//if c.conf.EnableMultiAck && c.numNoAck >= c.conf.PrefetchCount {
+	//	return 0, fmt.Errorf("Consume will block without Ack!")
+	//}
 
 	// Get a timeout
 	var wait <-chan time.Time

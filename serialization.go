@@ -34,7 +34,7 @@ func (*GOBSerializer) RelayDecode(r io.Reader, o interface{}) error {
 type JSONSerializer struct{}
 
 func (*JSONSerializer) ContentType() string {
-	return "text/json"
+	return "application/json"
 }
 
 func (*JSONSerializer) RelayEncode(w io.Writer, e interface{}) error {
